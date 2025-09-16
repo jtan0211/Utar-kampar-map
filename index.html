@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Parking Slot Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+
+    /* CSS Schematic Grid Section */
+    .parking-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 60px);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .slot {
+      width: 60px;
+      height: 60px;
+      border: 1px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: white;
+      cursor: pointer;
+    }
+    .vacant { background-color: green; }
+    .occupied { background-color: red; }
+
+    /* Leaflet map section */
+    #map { height: 600px; }
+
+    /* Marker rectangle */
+    .slot-marker {
+      width: 30px;    /* slightly bigger */
+      height: 20px;   /* rectangle shape */
+      border: 1px solid #333;
+      text-align: center;
+      line-height: 20px;
+      color: white;
+      font-weight: bold;
+      font-size: 12px;
+    }
+    .slot-marker.vacant { background-color: green; }
+    .slot-marker.occupied { background-color: red; }
+  </style>
+</head>
+<body>
+  <h1>UTAR Kampar Parking Slots</h1>
+
+  <!-- CSS Schematic Grid -->
+  <div class="parking-grid" id="parkingGrid"></div>
+
+  <!-- Map Section -->
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    // ---------- CSS Schematic Grid ----------
+    const totalSlots = 50;
+    const parkingGrid = document.getElementById("parkingGrid");
+
+    for (let i = 1; i <= totalSlots; i++) {
+      const slot = document.createElement("div");
+      slot.id = `slot${i}`;
+      slot.className = "slot vacant";
+      slot.innerText = `A${i}`;
+      parkingGrid.appendChild(slot);
+    }
+
+    async function fetchParkingDataGrid() {
+      try {
+        const response = await fetch("https://3inqjp08li.execute-api.ap-southeast-1.amazonaws.com/slots");
+        const data = await response.json();
+        data.forEach(item => {
+          const slotDiv = document.getElementById(item.slot_id.replace('A','slot'));
+          if (slotDiv) {
+            slotDiv.className = item.status.toLowerCase() === "occupied" ? "slot occupied" : "slot vacant";
+          }
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    fetchParkingDataGrid();
+    setInterval(fetchParkingDataGrid, 5000);
+
+    // ---------- Leaflet Map ----------
+    const map = L.map('map').setView([4.3410, 101.1365], 18);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
+
+    const polygonGeoJSON = {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": { "Name": "Polygon 1" },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [101.1367119, 4.3409922],
+                [101.1362774, 4.3412275],
+                [101.1359743, 4.3407408],
+                [101.1364008, 4.3405509],
+                [101.1367119, 4.3409922]
+              ]
+            ]
+          }
+        }
+      ]
+    };
+    const polygonLayer = L.geoJSON(polygonGeoJSON).addTo(map);
+
+    const bounds = polygonLayer.getBounds();
+    const latStep = (bounds.getNorth() - bounds.getSouth()) / 10;
+    const lngStep = (bounds.getEast() - bounds.getWest()) / 5;
+
+    const slotMarkers = [];
+    let slotCount = 0;
+
+    for (let i = 0; i < 10; i++) {
+      for (let j = 0; j < 5; j++) {
+        if (slotCount >= totalSlots) break;
+        const lat = bounds.getSouth() + i * latStep + latStep / 2;
+        const lng = bounds.getWest() + j * lngStep + lngStep / 2;
+
+        const slotDiv = L.divIcon({
+          className: 'slot-marker vacant',
+          html: `A${slotCount + 1}`
+        });
+
+        const marker = L.marker([lat, lng], { icon: slotDiv }).addTo(map);
+        slotMarkers.push({ marker, slotId: `A${slotCount + 1}` });
+        slotCount++;
+      }
+    }
+
+    async function fetchParkingDataMap() {
+      try {
+        const response = await fetch("https://3inqjp08li.execute-api.ap-southeast-1.amazonaws.com/slots");
+        const data = await response.json();
+        data.forEach(item => {
+          const slot = slotMarkers.find(s => s.slotId === item.slot_id);
+          if (slot) {
+            const className = item.status.toLowerCase() === 'occupied' ? 'slot-marker occupied' : 'slot-marker vacant';
+            slot.marker.setIcon(L.divIcon({ className, html: slot.slotId }));
+          }
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    fetchParkingDataMap();
+    setInterval(fetchParkingDataMap, 5000);
+
+  </script>
+</body>
+</html>
